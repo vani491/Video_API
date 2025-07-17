@@ -153,7 +153,7 @@ class VideoProcessor:
             temp_processed = str(output_path).replace('.mp4', '_temp.mp4')
 
             cmd1 = [
-                'ffmpeg',
+                '/usr/bin/ffmpeg',
                 '-i', str(input_path),
                 '-t', str(new_duration),
                 '-filter:v', f'setpts=PTS/{config.SPEED_MULTIPLIER}',
@@ -169,7 +169,7 @@ class VideoProcessor:
             black_screen_file = str(output_path).replace('.mp4', '_black.mp4')
 
             cmd2 = [
-                'ffmpeg',
+                '/usr/bin/ffmpeg',
                 '-f', 'lavfi', '-i', 'color=c=black:s=360x480:d=5',
                 '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100:duration=1.5',
                 '-filter_complex', '[0:v]drawtext=text="Follow For More":fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]',
@@ -184,7 +184,7 @@ class VideoProcessor:
 
             # Step 3: Concatenate both videos
             cmd3 = [
-                'ffmpeg',
+                '/usr/bin/ffmpeg',
                 '-i', temp_processed,
                 '-i', black_screen_file,
                 '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]',
