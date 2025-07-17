@@ -16,7 +16,7 @@ class Config:
     
     # Video processing settings - FIXED: 0.1% speed increase
     SPEED_MULTIPLIER = 1.001  # Speed up by 0.1% (1 + 0.001)
-    MAX_VIDEO_DURATION = 65  # seconds (as per requirements)
+    MAX_VIDEO_DURATION = 130  # seconds (as per requirements)
     MIN_VIDEO_DURATION = 1   # seconds
     
     # Storage settings - Production-ready paths
@@ -33,7 +33,7 @@ class Config:
     # FFmpeg settings
     FFMPEG_VIDEO_CODEC = "libx264"
     FFMPEG_AUDIO_CODEC = "aac"
-    FFMPEG_TIMEOUT = 300  # 5 minutes
+    FFMPEG_TIMEOUT = 900  # 5 minutes
     
     # API settings
     MAX_CONCURRENT_UPLOADS = 1  # Only one upload at a time

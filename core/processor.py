@@ -124,7 +124,7 @@ class VideoProcessor:
             
             # First, get video duration to calculate trim point
             duration_cmd = [
-                'ffprobe',
+                '/usr/bin/ffprobe',
                 '-v', 'quiet',
                 '-show_entries', 'format=duration',
                 '-of', 'csv=p=0',
@@ -154,12 +154,13 @@ class VideoProcessor:
             # setpts=PTS/1.001 speeds up by 0.1% (multiplier 1.001)
              # FFmpeg command for speed adjustment AND trimming
             cmd = [
-                'ffmpeg',
+                '/usr/bin/ffmpeg',
                 '-i', str(input_path),
                 '-t', str(new_duration),  # Trim to new duration (removes 0.1% from end)
                 '-filter:v', f'setpts=PTS/{config.SPEED_MULTIPLIER}',
                 '-filter:a', f'atempo={config.SPEED_MULTIPLIER}',
-                '-c:v', 'libx264',  # Use H.264 codec
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
                 '-c:a', 'aac',      # Use AAC audio codec
                 '-preset', 'fast',  # Fast encoding preset
                 '-movflags', '+faststart',  # Optimize for streaming

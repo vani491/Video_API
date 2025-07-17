@@ -27,7 +27,7 @@ class VideoValidator:
         """
         try:
             cmd = [
-                'ffprobe',
+                '/usr/bin/ffprobe',
                 '-v', 'quiet',
                 '-print_format', 'json',
                 '-show_format',
