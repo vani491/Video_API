@@ -149,48 +149,102 @@ class VideoProcessor:
             
             
             
-            # FFmpeg command for speed adjustment
-            # Using setpts filter to change playback speed
-            # setpts=PTS/1.001 speeds up by 0.1% (multiplier 1.001)
-             # FFmpeg command for speed adjustment AND trimming
-            cmd = [
-                '/usr/bin/ffmpeg',
+            # Step 1: Process the main video (speed up and trim)
+            temp_processed = str(output_path).replace('.mp4', '_temp.mp4')
+
+            cmd1 = [
+                'ffmpeg',
                 '-i', str(input_path),
-                '-t', str(new_duration),  # Trim to new duration (removes 0.1% from end)
+                '-t', str(new_duration),
                 '-filter:v', f'setpts=PTS/{config.SPEED_MULTIPLIER}',
                 '-filter:a', f'atempo={config.SPEED_MULTIPLIER}',
                 '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-c:a', 'aac',      # Use AAC audio codec
-                '-preset', 'fast',  # Fast encoding preset
-                '-movflags', '+faststart',  # Optimize for streaming
-                '-y',  # Overwrite output file
+                '-c:a', 'aac',
+                '-preset', 'fast',
+                '-y',
+                temp_processed
+            ]
+
+            # Step 2: Create black screen with text
+            black_screen_file = str(output_path).replace('.mp4', '_black.mp4')
+
+            cmd2 = [
+                'ffmpeg',
+                '-f', 'lavfi', '-i', 'color=c=black:s=360x480:d=5',
+                '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100:duration=1.5',
+                '-filter_complex', '[0:v]drawtext=text="Follow For More":fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]',
+                '-map', '[v]',
+                '-map', '1:a',
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-shortest',
+                '-y',
+                black_screen_file
+            ]
+
+            # Step 3: Concatenate both videos
+            cmd3 = [
+                'ffmpeg',
+                '-i', temp_processed,
+                '-i', black_screen_file,
+                '-filter_complex', '[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]',
+                '-map', '[outv]',
+                '-map', '[outa]',
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-preset', 'fast',
+                '-movflags', '+faststart',
+                '-y',
                 str(output_path)
             ]
-            
+
             # Update progress
             self.update_job_status(job_id, "processing", progress=40)
             
-            def run_ffmpeg():
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, stderr = process.communicate()
-                return stdout, stderr, process.returncode
+            def run_ffmpeg_commands():
+                try:
+                    # Execute all three commands
+                    process1 = subprocess.run(cmd1, capture_output=True, text=True)
+                    if process1.returncode != 0:
+                        return None, process1.stderr, process1.returncode
+                    
+                    process2 = subprocess.run(cmd2, capture_output=True, text=True)
+                    if process2.returncode != 0:
+                        return None, process2.stderr, process2.returncode
+                    
+                    process3 = subprocess.run(cmd3, capture_output=True, text=True)
+                    if process3.returncode != 0:
+                        return None, process3.stderr, process3.returncode
+                    
+                    # Clean up temp files
+                    import os
+                    if os.path.exists(temp_processed):
+                        os.remove(temp_processed)
+                    if os.path.exists(black_screen_file):
+                        os.remove(black_screen_file)
+                    
+                    return process3.stdout, process3.stderr, 0
+                    
+                except Exception as e:
+                    # Clean up temp files on error
+                    import os
+                    if os.path.exists(temp_processed):
+                        os.remove(temp_processed)
+                    if os.path.exists(black_screen_file):
+                        os.remove(black_screen_file)
+                    return None, str(e), 1
             
             # Run FFmpeg in thread executor with timeout
             loop = asyncio.get_event_loop()
             with ThreadPoolExecutor() as executor:
                 try:
                     stdout, stderr, returncode = await asyncio.wait_for(
-                        loop.run_in_executor(executor, run_ffmpeg),
+                        loop.run_in_executor(executor, run_ffmpeg_commands),
                         timeout=config.FFMPEG_TIMEOUT
                     )
                     
                     if returncode != 0:
-                        error_msg = stderr.decode('utf-8') if stderr else "Unknown FFmpeg error"
+                        error_msg = stderr if stderr else "Unknown FFmpeg error"
                         raise Exception(f"FFmpeg failed: {error_msg}")
                     
                     # Update progress
@@ -201,7 +255,7 @@ class VideoProcessor:
                     
         except Exception as e:
             raise Exception(f"FFmpeg processing error: {str(e)}")
-    
+                
     def cleanup_job(self, job_id: str) -> Dict[str, Any]:
         """Clean up job files and remove from memory"""
         cleanup_results = file_storage.cleanup_temp_files(job_id)
