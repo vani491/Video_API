@@ -119,35 +119,60 @@ class VideoProcessor:
             raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
     
     async def _process_with_ffmpeg(self, input_path: Path, output_path: Path, job_id: str):
-        """Process video using FFmpeg with speed adjustment"""
+        """Process video using FFmpeg with speed adjustment and dynamic resolution detection"""
         try:
             
-            # First, get video duration to calculate trim point
-            duration_cmd = [
+            # First, get video info (duration + resolution) using ffprobe
+            info_cmd = [
                 '/usr/bin/ffprobe',
                 '-v', 'quiet',
-                '-show_entries', 'format=duration',
-                '-of', 'csv=p=0',
+                '-print_format', 'json',
+                '-show_streams',
+                '-show_format',
                 str(input_path)
             ]
             
-            # Get video duration
-            duration_process = subprocess.run(
-                duration_cmd,
+            # Get video info
+            info_process = subprocess.run(
+                info_cmd,
                 capture_output=True,
                 text=True
             )
             
-            if duration_process.returncode != 0:
-                raise Exception("Failed to get video duration")
+            if info_process.returncode != 0:
+                raise Exception("Failed to get video information")
             
-            total_duration = float(duration_process.stdout.strip())
+            # Parse video info
+            import json
+            video_data = json.loads(info_process.stdout)
             
-            # Calculate new duration (remove 0.1% from end)
-            trim_percentage = 0.2  # 0.1% = 0.001
+            # Extract duration from format
+            total_duration = float(video_data['format']['duration'])
+            
+            # Extract video stream info (resolution, fps)
+            video_stream = None
+            for stream in video_data['streams']:
+                if stream['codec_type'] == 'video':
+                    video_stream = stream
+                    break
+            
+            if not video_stream:
+                raise Exception("No video stream found")
+            
+            width = video_stream['width']
+            height = video_stream['height']
+            
+            # Get FPS (handle fraction format like "30/1")
+            fps_fraction = video_stream.get('r_frame_rate', '30/1')
+            fps = eval(fps_fraction) if '/' in fps_fraction else float(fps_fraction)
+            fps = int(fps)
+            
+            # Calculate new duration (remove 0.2% from end)
+            trim_percentage = 0.002  # 0.2% = 0.002
             new_duration = total_duration * (1 - trim_percentage)
             
-            
+            # Calculate adaptive font size based on resolution
+            font_size = max(20, min(width, height) // 25)
             
             # Step 1: Process the main video (speed up and trim)
             temp_processed = str(output_path).replace('.mp4', '_temp.mp4')
@@ -165,24 +190,25 @@ class VideoProcessor:
                 temp_processed
             ]
 
-            # Step 2: Create black screen with text
+            # Step 2: Create black screen with text (using same resolution as input)
             black_screen_file = str(output_path).replace('.mp4', '_black.mp4')
 
             cmd2 = [
                 '/usr/bin/ffmpeg',
-                '-f', 'lavfi', '-i', 'color=c=black:s=360x480:d=5',
+                '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:d=1.5',
                 '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100:duration=1.5',
-                '-filter_complex', '[0:v]drawtext=text="Follow For More":fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]',
+                '-filter_complex', f'[0:v]drawtext=text="Follow For More":fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=(h-text_h)/2[v]',
                 '-map', '[v]',
                 '-map', '1:a',
                 '-c:v', 'libx264',
                 '-c:a', 'aac',
+                '-r', str(fps),  # Match frame rate
                 '-shortest',
                 '-y',
                 black_screen_file
             ]
 
-            # Step 3: Concatenate both videos
+            # Step 3: Concatenate both videos (now they have same resolution)
             cmd3 = [
                 '/usr/bin/ffmpeg',
                 '-i', temp_processed,
@@ -206,15 +232,15 @@ class VideoProcessor:
                     # Execute all three commands
                     process1 = subprocess.run(cmd1, capture_output=True, text=True)
                     if process1.returncode != 0:
-                        return None, process1.stderr, process1.returncode
+                        return None, f"Step 1 failed: {process1.stderr}", process1.returncode
                     
                     process2 = subprocess.run(cmd2, capture_output=True, text=True)
                     if process2.returncode != 0:
-                        return None, process2.stderr, process2.returncode
+                        return None, f"Step 2 failed: {process2.stderr}", process2.returncode
                     
                     process3 = subprocess.run(cmd3, capture_output=True, text=True)
                     if process3.returncode != 0:
-                        return None, process3.stderr, process3.returncode
+                        return None, f"Step 3 failed: {process3.stderr}", process3.returncode
                     
                     # Clean up temp files
                     import os
