@@ -9,6 +9,12 @@ from core.storage import file_storage
 from utils.cleanup import cleanup_manager
 from middleware.processing_lock import processing_lock
 
+
+from pydantic import BaseModel
+import subprocess
+import uuid
+import os
+
 router = APIRouter()
 
 @router.post("/upload", response_model=Dict[str, Any])
@@ -223,3 +229,33 @@ async def list_all_jobs() -> Dict[str, Any]:
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list jobs: {str(e)}")
+    
+    
+class ReelRequest(BaseModel):
+    reel_url: str
+
+@router.post("/get-reel-url")
+async def get_reel_direct_url(request: ReelRequest):
+    try:
+        # Generate a temporary file to hold stdout
+        command = [
+            "yt-dlp",
+            "-f", "bv+ba",  # Best video + audio format
+            "-g",           # Get direct URL
+            request.reel_url
+        ]
+
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=400, detail=f"yt-dlp failed: {result.stderr}")
+
+        # Extract and return URLs (could be one or two lines)
+        urls = result.stdout.strip().split("\n")
+        return {
+            "video_url": urls[0],
+            "audio_url": urls[1] if len(urls) > 1 else None
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Invalid or private Instagram reel link: {result.stderr}")
