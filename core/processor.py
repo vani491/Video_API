@@ -172,7 +172,7 @@ class VideoProcessor:
             new_duration = total_duration * (1 - trim_percentage)
             
             # Calculate adaptive font size based on resolution
-            font_size = max(20, min(width, height) // 25)
+            font_size = max(22, min(width, height) // 25)
             
             # Step 1: Process the main video (speed up and trim)
             temp_processed = str(output_path).replace('.mp4', '_temp.mp4')
@@ -197,7 +197,7 @@ class VideoProcessor:
                 '/usr/bin/ffmpeg',
                 '-f', 'lavfi', '-i', f'color=c=black:s={width}x{height}:d=1.5',
                 '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100:duration=1.5',
-                '-filter_complex', f'[0:v]drawtext=text="Follow For More":fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=(h-text_h)/2[v]',
+                '-filter_complex', f'[0:v]drawtext=text=Follow for more:fontcolor=white:fontsize={font_size}:x=(w-text_w)/2:y=(h-text_h)/2[v]',
                 '-map', '[v]',
                 '-map', '1:a',
                 '-c:v', 'libx264',
